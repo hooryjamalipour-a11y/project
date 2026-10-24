@@ -389,7 +389,7 @@ video, audio {
       const p = clamp((now - stateStartTime) / (EXIT_DURATION * 1000), 0, 1);
       const ease = p * p * p;
       baseX = lockedX + (exitX - lockedX) * ease;
-      character.volume = clamp(0.85 * (1 - p), 0, 1);
+      character.volume = clamp(0.35 * (1 - p), 0, 1);
       if (p >= 1) {
         state = 'DONE';
         character.pause();
@@ -451,7 +451,7 @@ video, audio {
     // 1. Start character video (try unmuted first; if browser blocks unmuted autoplay, start muted immediately so entry works)
     try {
       character.muted = false;
-      character.volume = 0.85;
+      character.volume = 0.35;
       await character.play();
       beginSequenceIfNeeded();
     } catch (e) {
