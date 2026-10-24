@@ -6,8 +6,7 @@
 <meta name="theme-color" content="#000000">
 <title></title>
 <style>
-*{box-sizing:border-box}
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}
 body{position:fixed;inset:0;touch-action:manipulation}
 #camera,#character{display:none}
 #screen{position:fixed;inset:0;width:100%;height:100%;display:block;background:#000}
@@ -16,14 +15,14 @@ body{position:fixed;inset:0;touch-action:manipulation}
 <body>
 <video id="camera" playsinline muted autoplay></video>
 <video id="character" src="./lv_0_202610240924464.mp4" playsinline preload="auto" crossorigin="anonymous"></video>
-<audio id="voice" src="./rostam-voice.mp3" preload="auto"></audio>
+<audio id="voice" src="./rostam-voice.mp3" preload="auto" loop></audio>
 <canvas id="screen"></canvas>
 <script>
 (()=>{
 'use strict';
 const canvas=document.getElementById('screen'),ctx=canvas.getContext('2d',{alpha:false});
 const camera=document.getElementById('camera'),character=document.getElementById('character'),voice=document.getElementById('voice');
-let stream=null,raf=0,runStart=0,active=false,starting=false,done=false,lastW=0,lastH=0;
+let stream=null,raf=0,runStart=0,active=false,starting=false,lastW=0,lastH=0,gestureStart=false;
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 function fit(){
  const dpr=Math.min(window.devicePixelRatio||1,2),w=innerWidth,h=innerHeight;
@@ -34,19 +33,26 @@ function cover(v,w,h){
  ctx.drawImage(v,(w-dw)/2,(h-dh)/2,dw,dh);
 }
 function drawCharacter(w,h,t){
- if(character.readyState<2||!character.videoWidth||t>=41)return;
- let k;
- if(t<2){let x=clamp(t/2,0,1);k=.25+.75*(x*x*(3-2*x))}
- else if(t<39)k=1;
- else k=1-clamp((t-39)/2,0,1);
+ if(character.readyState<2||!character.videoWidth)return;
  const vw=character.videoWidth,vh=character.videoHeight;
- const dw=Math.min(w*.88,h*1.08)*k,dh=dw*vh/vw;
+ // 15% larger than v5.2; enter from beyond the left edge, then settle at frame center.
+ let scale, x;
+ const baseW=Math.min(w*.88,h*1.08)*1.15;
+ if(t<2){
+   const p=clamp(t/2,0,1),ease=p*p*(3-2*p);
+   scale=.25+.75*ease;
+   x=(-baseW*.65)+(w/2+baseW*.65)*ease;
+ } else {
+   scale=1.15;
+   x=w/2;
+ }
+ const dw=baseW*scale,dh=dw*vh/vw;
  if(!drawCharacter.tmp){drawCharacter.tmp=document.createElement('canvas');drawCharacter.tctx=drawCharacter.tmp.getContext('2d',{willReadFrequently:true})}
  const tmp=drawCharacter.tmp,tctx=drawCharacter.tctx;
  if(tmp.width!==vw||tmp.height!==vh){tmp.width=vw;tmp.height=vh}
  tctx.drawImage(character,0,0,vw,vh);
  let image;
- try{image=tctx.getImageData(0,0,vw,vh)}catch(e){ctx.drawImage(character,(w-dw)/2,(h-dh)/2,dw,dh);return}
+ try{image=tctx.getImageData(0,0,vw,vh)}catch(e){ctx.drawImage(character,x-dw/2,(h-dh)/2,dw,dh);return}
  const d=image.data;
  for(let i=0;i<d.length;i+=4){
   const r=d[i],g=d[i+1],b=d[i+2],dom=g-Math.max(r,b);
@@ -56,15 +62,15 @@ function drawCharacter(w,h,t){
   if(d[i+3]>0&&dom>10)d[i+1]=Math.min(g,Math.max(r,b)+Math.round((g-Math.max(r,b))*(1-green)*.2));
  }
  tctx.putImageData(image,0,0);
- ctx.drawImage(tmp,(w-dw)/2,(h-dh)/2,dw,dh);
+ ctx.drawImage(tmp,x-dw/2,(h-dh)/2,dw,dh);
 }
 function loop(){
  fit();const w=innerWidth,h=innerHeight;
  if(camera.readyState>=2)cover(camera,w,h);else{ctx.fillStyle='#000';ctx.fillRect(0,0,w,h)}
  if(active){
-  const elapsed=(performance.now()-runStart)/1000;
-  drawCharacter(w,h,elapsed);
-  if(elapsed>=41){active=false;done=true;character.pause();voice.pause()}
+  const t=(performance.now()-runStart)/1000;
+  // Keep the character video looping continuously; visual entrance is only applied at start.
+  drawCharacter(w,h,t);
  }
  raf=requestAnimationFrame(loop);
 }
@@ -77,13 +83,16 @@ async function start(){
    camera.srcObject=stream;
    await camera.play();
   }
-  character.pause();character.currentTime=0;
+  character.loop=true;
+  character.muted=false;
+  character.volume=1;
+  character.currentTime=0;
   await character.play();
-  voice.pause();voice.currentTime=0;
+  // Play the separate voice track too, if present, and keep it looping.
+  voice.loop=true;voice.volume=1;voice.currentTime=0;
   try{await voice.play()}catch(e){}
-  runStart=performance.now();active=true;done=false;
+  runStart=performance.now();active=true;
  }catch(e){
-  // No visible UI by design. A tap retries after the user grants permissions.
   starting=false;return;
  }
  starting=false;
@@ -91,9 +100,7 @@ async function start(){
 document.addEventListener('pointerdown',()=>{if(!active)start()},{passive:true});
 document.addEventListener('keydown',()=>{if(!active)start()});
 window.addEventListener('resize',fit);
-character.addEventListener('ended',()=>{});
 fit();loop();
-// Ask for the camera immediately on page load; tap anywhere starts media if autoplay is blocked.
 start();
 })();
 </script>
